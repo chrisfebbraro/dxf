@@ -17,10 +17,11 @@ export const process = (tuples) => {
           entity.controlPoints.push(controlPoint)
           break
         case 20:
-          controlPoint.y = value
+          // A control point's fields before its first point belong to none, and are skipped.
+          if (controlPoint) controlPoint.y = value
           break
         case 30:
-          controlPoint.z = value
+          if (controlPoint) controlPoint.z = value
           break
         case 40:
           entity.knots.push(value)

@@ -17,6 +17,7 @@
     "prettier": "prettier --write .",
     "test": "npm run test:unit",
     "test:functional": "cd test/functional && webpack-dev-server",
+    "test:fuzz": "node -r @babel/register test/fuzz.js",
     "test:unit": "mocha --require @babel/register --recursive test/unit/**",
     "test:unit:watch": "npm run test:unit -- --watch"
   },

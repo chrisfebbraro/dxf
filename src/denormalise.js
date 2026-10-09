@@ -99,7 +99,7 @@ export default (parseResult, limits = {}) => {
             transforms2.push(t)
 
             // Use the insert layer
-            const blockEntities = block.entities.map((be) => {
+            const blockEntities = (block.entities || []).map((be) => {
               const be2 = cloneDeep(be)
               be2.layer = insert.layer
               // https://github.com/bjnortier/dxf/issues/52

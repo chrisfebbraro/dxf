@@ -20,14 +20,15 @@ export const process = (tuples) => {
           entity.vertices.push(vertex)
           break
         case 20:
-          vertex.y = value
+          // A vertex's fields before its first vertex belong to none, and are skipped.
+          if (vertex) vertex.y = value
           break
         case 39:
           entity.thickness = value
           break
         case 42:
           // Bulge (multiple entries; one entry for each vertex)  (optional; default = 0).
-          vertex.bulge = value
+          if (vertex) vertex.bulge = value
           break
         default:
           Object.assign(entity, common(type, value))

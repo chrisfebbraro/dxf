@@ -56,7 +56,10 @@ const entities = denormalise(parseString(text), { maxDepth: 16, maxEntities: 500
   `denormalise` throws an error with `code: 'DXF_TOO_MANY_ENTITIES'`.
 - Names from the file (blocks, layers, styles, entity types) are kept in prototype-free lookups, so a
   name such as `__proto__` or `constructor` is an ordinary name.
-- Empty sections and values outside any entity or table row are skipped rather than thrown on.
+- Empty sections, values outside any entity or table row, and fields that arrive before the vertex,
+  control point, edge or seed they belong to are skipped rather than thrown on.
+- A spline whose degree, knots or weights do not fit its control points is drawn through its control
+  points; a polyface mesh face naming a missing vertex is left out.
 
 ## Running the Examples
 
@@ -123,6 +126,8 @@ Running
 `$ npm test`
 
 will execute the unit tests.
+
+`$ npm run test:fuzz` damages every sample file in `test/resources` in thousands of seeded ways and fails if parsing, flattening, polylines or SVG throws.
 
 `$ npm run test:functional` will run the functional tests in a browser. Please open `toSVG.html` when the file listing loads in the browser (or open `http://localhost:8030/toSVG.html#/`).
 

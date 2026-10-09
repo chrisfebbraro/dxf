@@ -2,15 +2,20 @@ import common from './common'
 
 export const TYPE = 'HATCH'
 
-let status = 'IDLE'
-let drawEntity = {}
-let drawType = 0
-let isPolyline = false
-let seed = null
-let loop = { references: [], entities: [] }
-let polyPoint = null
+// The entity each boundary edge type makes.
+const EDGE_TYPES = { 1: 'LINE', 2: 'ARC', 3: 'ELLIPSE', 4: 'SPLINE' }
 
 export const process = (tuples) => {
+  // Where the reading of this hatch has got to. Kept per hatch, so one cut short cannot steer the next,
+  // in this file or another.
+  let status = 'IDLE'
+  let drawEntity = {}
+  let drawType = 0
+  let isPolyline = false
+  let seed = null
+  let loop = { references: [], entities: [] }
+  let polyPoint = null
+
   return tuples.reduce(
     (entity, tuple) => {
       const type = tuple[0]
@@ -39,17 +44,19 @@ export const process = (tuples) => {
                 entity.seeds.seeds.push(seed)
               }
               seed.x = parseFloat(value)
-            } else fillDrawEntity(type, drawType, parseFloat(value))
+            } else fillDrawEntity(drawEntity, type, drawType, parseFloat(value))
           }
           break
         case 20:
           {
+            // A point's or a seed's y before its x belongs to none, and is skipped.
             if (status === 'IDLE') entity.elevation.y = parseFloat(value)
-            else if (status === 'POLYLINE') polyPoint.y = parseFloat(value)
-            else if (status === 'SEED') {
-              seed.y = parseFloat(value)
+            else if (status === 'POLYLINE') {
+              if (polyPoint) polyPoint.y = parseFloat(value)
+            } else if (status === 'SEED') {
+              if (seed) seed.y = parseFloat(value)
               seed = null
-            } else fillDrawEntity(type, drawType, parseFloat(value))
+            } else fillDrawEntity(drawEntity, type, drawType, parseFloat(value))
           }
           break
         case 30:
@@ -109,12 +116,13 @@ export const process = (tuples) => {
         case 95:
         case 96:
           if (drawType === 4) status = 'SPLINE'
-          fillDrawEntity(type, drawType, parseFloat(value))
+          fillDrawEntity(drawEntity, type, drawType, parseFloat(value))
           break
         case 42:
           {
-            if (isPolyline) polyPoint.bulge = parseFloat(value)
-            else fillDrawEntity(type, drawType, parseFloat(value))
+            if (isPolyline) {
+              if (polyPoint) polyPoint.bulge = parseFloat(value)
+            } else fillDrawEntity(drawEntity, type, drawType, parseFloat(value))
           }
           break
         case 72:
@@ -124,15 +132,16 @@ export const process = (tuples) => {
             drawType = parseFloat(value)
             loop[isPolyline ? 'hasBulge' : 'edgeType'] = drawType
             if (!isPolyline) {
-              drawEntity = createDrawEntity(drawType)
+              drawEntity = createDrawEntity(drawType, isPolyline)
               loop.entities.push(drawEntity)
             }
           }
           break
         case 73:
           {
-            if (status === 'IDLE' || isPolyline) loop.entities[0].closed = value
-            else fillDrawEntity(type, drawType, parseFloat(value))
+            if (status === 'IDLE' || isPolyline) {
+              if (loop.entities[0]) loop.entities[0].closed = value
+            } else fillDrawEntity(drawEntity, type, drawType, parseFloat(value))
           }
           break
         case 75:
@@ -236,7 +245,8 @@ export const process = (tuples) => {
 
 export default { TYPE, process }
 
-function createDrawEntity(type) {
+// The entity a boundary edge of `type` starts as; none for a polyline boundary, whose points are its own.
+function createDrawEntity(type, isPolyline) {
   if (isPolyline) return {}
 
   // 1 = Line; 2 = Circular arc; 3 = Elliptic arc; 4 = Spline
@@ -281,7 +291,10 @@ function createDrawEntity(type) {
   return {}
 }
 
-function fillDrawEntity(type, drawType, value) {
+// Sets one field of the edge being read; one that does not fit the edge — given before its edge type, or
+// for another type — is skipped.
+function fillDrawEntity(drawEntity, type, drawType, value) {
+  if (!drawEntity || drawEntity.type !== EDGE_TYPES[drawType]) return
   switch (type) {
     case 10:
       {
@@ -328,9 +341,8 @@ function fillDrawEntity(type, drawType, value) {
           break
         case 4:
           {
-            drawEntity.controlPoints.points[
-              drawEntity.controlPoints.points.length - 1
-            ].y = value
+            const points = drawEntity.controlPoints.points
+            if (points.length) points[points.length - 1].y = value
           }
           break
       }

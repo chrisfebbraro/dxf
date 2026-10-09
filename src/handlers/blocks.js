@@ -16,6 +16,8 @@ export default (tuples) => {
       entitiesTuples = []
       blocks.push(block)
     } else if (value === 'ENDBLK') {
+      // An end with no block open has nothing to end.
+      if (!block) return
       if (state === 'entities') {
         block.entities = entitiesHandler(entitiesTuples)
       } else {
@@ -23,6 +25,7 @@ export default (tuples) => {
       }
       entitiesTuples = undefined
       state = undefined
+      block = undefined
     } else if (state === 'block' && type !== 0) {
       switch (type) {
         case 1:
@@ -58,6 +61,11 @@ export default (tuples) => {
       entitiesTuples.push(tuple)
     }
   })
+
+  // A block still open when its section ends keeps what it holds (#151).
+  if (block && !block.entities) {
+    block.entities = state === 'entities' ? entitiesHandler(entitiesTuples) : []
+  }
 
   return blocks
 }

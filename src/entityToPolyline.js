@@ -104,6 +104,21 @@ export const interpolateBSpline = (
   return polyline
 }
 
+// Whether a spline's degree, knots and weights fit its control points, as evaluating it requires.
+export const splineIsValid = (entity) => {
+  const n = (entity.controlPoints || []).length
+  const degree = entity.degree
+  const knots = entity.knots || []
+  return (
+    Number.isInteger(degree) &&
+    degree >= 1 &&
+    degree <= n - 1 &&
+    knots.length === n + degree + 1 &&
+    knots.every(Number.isFinite) &&
+    (!entity.weights || entity.weights.length === n)
+  )
+}
+
 export const polyfaceOutline = (entity) => {
   const vertices = []
   const faces = []
@@ -124,6 +139,11 @@ export const polyfaceOutline = (entity) => {
       vertices.push({ x: v.x, y: v.y })
     }
   }
+  // A face naming a vertex the mesh does not have is left out.
+  const usable = faces.filter((f) =>
+    f.indices.every((i) => i >= 0 && i < vertices.length),
+  )
+  faces.splice(0, faces.length, ...usable)
 
   // If a segment starts at the end of a previous line, continue it
   const polylines = []
@@ -271,13 +291,19 @@ export default (entity, options) => {
   }
 
   if (entity.type === 'SPLINE') {
-    polyline = interpolateBSpline(
-      entity.controlPoints,
-      entity.degree,
-      entity.knots,
-      options.interpolationsPerSplineSegment,
-      entity.weights,
-    )
+    // A spline whose degree, knots or weights do not fit its control points cannot be evaluated; it is
+    // drawn through its control points instead, rather than failing the whole drawing.
+    const valid = splineIsValid(entity)
+    if (!valid) logger.warn('invalid spline drawn through its control points')
+    polyline = valid
+      ? interpolateBSpline(
+          entity.controlPoints,
+          entity.degree,
+          entity.knots,
+          options.interpolationsPerSplineSegment,
+          entity.weights,
+        )
+      : (entity.controlPoints || []).map((p) => [p.x, p.y])
   }
 
   if (!polyline) {

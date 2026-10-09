@@ -1,6 +1,12 @@
 import expect from 'expect'
 
-import { parseString, denormalise, groupEntitiesByLayer } from '../../src'
+import {
+  parseString,
+  denormalise,
+  groupEntitiesByLayer,
+  toPolylines,
+  toSVG,
+} from '../../src'
 
 // UNTRUSTED FILES. Each case is a file someone could upload on purpose or by accident; none may throw a
 // TypeError, recurse until the stack runs out, or expand without bound.
@@ -325,6 +331,366 @@ describe('Hostile input', () => {
         ),
       )
       expect(denormalise(parsed).length).toEqual(1)
+    })
+  })
+
+  describe('fields before the thing they belong to', () => {
+    it('a polyline vertex coordinate or bulge before its first vertex is skipped', () => {
+      const parsed = parseString(
+        dxf(
+          section(
+            'ENTITIES',
+            0,
+            'LWPOLYLINE',
+            8,
+            '0',
+            20,
+            5,
+            42,
+            0.5,
+            10,
+            1,
+            20,
+            2,
+            10,
+            3,
+            20,
+            4,
+          ),
+          eof,
+        ),
+      )
+      expect(parsed.entities[0].vertices).toEqual([
+        { x: 1, y: 2 },
+        { x: 3, y: 4 },
+      ])
+    })
+
+    it('a spline control point coordinate before its first point is skipped', () => {
+      const parsed = parseString(
+        dxf(
+          section('ENTITIES', 0, 'SPLINE', 8, '0', 20, 5, 30, 1, 10, 1, 20, 2),
+          eof,
+        ),
+      )
+      expect(parsed.entities[0].controlPoints).toEqual([{ x: 1, y: 2 }])
+    })
+
+    it('a block end with no block is skipped', () => {
+      const parsed = parseString(
+        dxf(section('BLOCKS', 0, 'ENDBLK', ...block('A', ...line())), eof),
+      )
+      expect(parsed.blocks.map((b) => b.name)).toEqual(['A'])
+    })
+
+    it('a block left open at the end of its section keeps its entities (#151)', () => {
+      const parsed = parseString(
+        dxf(
+          section('BLOCKS', 0, 'BLOCK', 2, 'A', 10, 0, 20, 0, ...line()),
+          section('ENTITIES', ...insert('A')),
+          eof,
+        ),
+      )
+      expect(denormalise(parsed).map((e) => e.type)).toEqual(['LINE'])
+    })
+
+    it('a block with no entity list is inserted as nothing rather than thrown on (#151)', () => {
+      const parsed = parseString(dxf(section('ENTITIES', ...insert('A')), eof))
+      parsed.blocks.push({ name: 'A', x: 0, y: 0 })
+      expect(denormalise(parsed)).toEqual([])
+    })
+
+    it('hatch edge fields before their edge type are skipped', () => {
+      const parsed = parseString(
+        dxf(
+          section(
+            'ENTITIES',
+            0,
+            'HATCH',
+            8,
+            '0',
+            100,
+            'AcDbHatch',
+            91,
+            1,
+            92,
+            1,
+            93,
+            1,
+            11,
+            1,
+            21,
+            1,
+            40,
+            2,
+            73,
+            1,
+            97,
+            0,
+          ),
+          eof,
+        ),
+      )
+      expect(parsed.entities[0].boundary.loops.length).toEqual(1)
+    })
+
+    it('a hatch polyline bulge or coordinate before its first point is skipped', () => {
+      const parsed = parseString(
+        dxf(
+          section(
+            'ENTITIES',
+            0,
+            'HATCH',
+            8,
+            '0',
+            100,
+            'AcDbHatch',
+            91,
+            1,
+            92,
+            2,
+            72,
+            1,
+            73,
+            1,
+            93,
+            1,
+            42,
+            0.5,
+            20,
+            3,
+            10,
+            1,
+            20,
+            2,
+            97,
+            0,
+          ),
+          eof,
+        ),
+      )
+      expect(parsed.entities[0].boundary.loops[0].entities[0].points).toEqual([
+        { x: 1, y: 2, bulge: 0 },
+      ])
+    })
+
+    it('a hatch polyline keeps a bulge per point and its closed flag on the polyline (#112)', () => {
+      const parsed = parseString(
+        dxf(
+          section(
+            'ENTITIES',
+            0,
+            'HATCH',
+            8,
+            '0',
+            100,
+            'AcDbHatch',
+            91,
+            1,
+            92,
+            2,
+            72,
+            1,
+            73,
+            1,
+            93,
+            2,
+            10,
+            0,
+            20,
+            0,
+            42,
+            0.5,
+            10,
+            1,
+            20,
+            0,
+            42,
+            -0.25,
+            97,
+            0,
+          ),
+          eof,
+        ),
+      )
+      const polyline = parsed.entities[0].boundary.loops[0].entities[0]
+      expect([polyline.closed, polyline.points.map((p) => p.bulge)]).toEqual([
+        1,
+        [0.5, -0.25],
+      ])
+    })
+
+    it('a hatch seed coordinate before its seed is skipped', () => {
+      const parsed = parseString(
+        dxf(
+          section(
+            'ENTITIES',
+            0,
+            'HATCH',
+            8,
+            '0',
+            100,
+            'AcDbHatch',
+            98,
+            1,
+            20,
+            7,
+            10,
+            1,
+            20,
+            2,
+          ),
+          eof,
+        ),
+      )
+      expect(parsed.entities[0].seeds.seeds).toEqual([{ x: 1, y: 2 }])
+    })
+
+    it('one hatch leaves nothing behind for the next, in this file or another', () => {
+      // A hatch cut short while reading its seeds, then one whose first point is its elevation.
+      const unfinished = [0, 'HATCH', 8, '0', 100, 'AcDbHatch', 98, 1, 10, 9]
+      const next = [0, 'HATCH', 8, '0', 10, 5, 20, 6, 30, 0]
+      // The expected elevation is written out, not parsed, so a leak left by any earlier case cannot hide.
+      const elevation = { x: 5, y: 6, z: 0 }
+      const after = parseString(
+        dxf(section('ENTITIES', ...unfinished, ...next), eof),
+      ).entities[1]
+      parseString(dxf(section('ENTITIES', ...unfinished), eof))
+      const nextFile = parseString(dxf(section('ENTITIES', ...next), eof))
+        .entities[0]
+      expect([after.elevation, nextFile.elevation]).toEqual([
+        elevation,
+        elevation,
+      ])
+    })
+  })
+
+  describe('shapes that cannot be drawn as given', () => {
+    // A spline from control points and a degree, with the knots it is given.
+    const spline = (degree, points, knots) => [
+      0,
+      'SPLINE',
+      8,
+      '0',
+      71,
+      degree,
+      ...knots.flatMap((k) => [40, k]),
+      ...points.flatMap(([x, y]) => [10, x, 20, y]),
+    ]
+    const square = [
+      [0, 0],
+      [1, 0],
+      [1, 1],
+      [0, 1],
+    ]
+
+    it('a spline of degree 0 is drawn through its control points', () => {
+      const parsed = parseString(
+        dxf(section('ENTITIES', ...spline(0, square, [0, 1, 2, 3, 4])), eof),
+      )
+      expect(toPolylines(parsed).polylines[0].vertices).toEqual(square)
+    })
+
+    it('a spline with a knot vector of the wrong length is drawn through its control points', () => {
+      const parsed = parseString(
+        dxf(section('ENTITIES', ...spline(2, square, [0, 0, 1])), eof),
+      )
+      expect(toPolylines(parsed).polylines[0].vertices).toEqual(square)
+    })
+
+    it('a spline of higher degree than its points allow is drawn through them', () => {
+      const parsed = parseString(
+        dxf(
+          section(
+            'ENTITIES',
+            ...spline(5, square, [0, 0, 0, 0, 0, 0, 1, 1, 1, 1]),
+          ),
+          eof,
+        ),
+      )
+      expect(toPolylines(parsed).polylines[0].vertices).toEqual(square)
+    })
+
+    it('a spline with no control points draws nothing, and SVG still renders', () => {
+      const parsed = parseString(
+        dxf(section('ENTITIES', 0, 'SPLINE', 8, '0', 71, 3, ...line()), eof),
+      )
+      expect(toPolylines(parsed).polylines.length).toEqual(2)
+      expect(typeof toSVG(parsed)).toEqual('string')
+    })
+
+    it('a polyface mesh face naming a vertex that is not there is left out', () => {
+      const parsed = parseString(
+        dxf(
+          section(
+            'ENTITIES',
+            0,
+            'POLYLINE',
+            8,
+            '0',
+            70,
+            64,
+            0,
+            'VERTEX',
+            8,
+            '0',
+            10,
+            0,
+            20,
+            0,
+            70,
+            192,
+            0,
+            'VERTEX',
+            8,
+            '0',
+            10,
+            1,
+            20,
+            0,
+            70,
+            192,
+            0,
+            'VERTEX',
+            8,
+            '0',
+            10,
+            1,
+            20,
+            1,
+            70,
+            192,
+            0,
+            'VERTEX',
+            8,
+            '0',
+            70,
+            128,
+            71,
+            1,
+            72,
+            2,
+            73,
+            3,
+            0,
+            'VERTEX',
+            8,
+            '0',
+            70,
+            128,
+            71,
+            1,
+            72,
+            2,
+            73,
+            9,
+            0,
+            'SEQEND',
+          ),
+          eof,
+        ),
+      )
+      expect(() => toPolylines(parsed)).not.toThrow()
     })
   })
 })
