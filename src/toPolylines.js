@@ -1,7 +1,7 @@
 import { Box2 } from 'vecks'
 
 import colors from './util/colors'
-import denormalise from './denormalise'
+import denormalise, { resolveLimits, tooMany } from './denormalise'
 import entityToPolyline from './entityToPolyline'
 import applyTransforms from './applyTransforms'
 import logger from './util/logger'
@@ -9,6 +9,9 @@ import { own } from './util/dict'
 
 export default (parsed, limits) => {
   const entities = denormalise(parsed, limits)
+  // The points drawn are counted against the same limit: a circle becomes dozens of them.
+  const { maxEntities } = resolveLimits(limits)
+  let points = 0
   const polylines = entities.map((entity) => {
     const layerTable = own(parsed.tables.layers, entity.layer)
     let colorNumber = 0
@@ -23,10 +26,13 @@ export default (parsed, limits) => {
       colorNumber = 0
     }
 
+    const outline = entityToPolyline(entity)
+    points += outline.length
+    if (points > maxEntities) throw tooMany(maxEntities)
     return {
       rgb: colors[colorNumber],
       layer: layerTable,
-      vertices: applyTransforms(entityToPolyline(entity), entity.transforms),
+      vertices: applyTransforms(outline, entity.transforms),
     }
   })
 

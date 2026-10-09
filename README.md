@@ -57,11 +57,13 @@ const helper = new Helper(text, limits)
 ```
 
 - A block nested deeper than `maxDepth` inserts (default 64), or one that inserts itself, is skipped.
-- `maxEntities` (default 20,000,000) bounds what block insertion would produce, and is checked before
-  any of it is produced: every value each copied entity carries (coordinates, vertices, control points,
-  hatch outlines and the rest), times every array place, through every level of nested inserts, plus
-  one for each `INSERT`, including those that will be skipped. Entities written directly in the file are
-  bounded by the file's size and are not counted. Past the limit, flattening throws an error with
+- `maxEntities` (default 20,000,000) bounds what block insertion produces, counted as it is produced:
+  every value each copied entity carries (coordinates, vertices, control points, hatch outlines and the
+  rest) plus the placing steps it carries, one for every array place, and one for every `INSERT`,
+  including those that will be skipped. A top-level insert whose whole expansion is estimated past the
+  limit is refused before any of it is produced. Entities written directly in the file are bounded by
+  the file's size and are not counted. `toPolylines` also counts the points it draws against the same
+  limit, since a circle becomes dozens of them. Past the limit, an error is thrown with
   `code: 'DXF_TOO_MANY_ENTITIES'`. Limits that are missing, `null`, negative or not a number fall back to
   the defaults, which are exported as `DEFAULT_LIMITS`.
 - Names from the file (blocks, layers, styles, entity types) are ordinary keys: a layer or block named

@@ -1095,4 +1095,63 @@ describe('Hostile input', () => {
       expect(polylines[0].vertices.length).toEqual(n + 1)
     })
   })
+
+  describe('what is produced is counted, not only what was estimated', () => {
+    it('a block whose cost depends on where it is reached from cannot slip past the limit', () => {
+      // B costed inside A sees its insert of A as a self-insert; reached through C, it expands A in full.
+      const parsed = parseString(
+        dxf(
+          section(
+            'BLOCKS',
+            ...block('L', ...line()),
+            ...block('A', ...insert('B'), ...insert('L', 70, 100, 71, 100)),
+            ...block('B', ...line(), ...insert('A')),
+            ...block('C', ...insert('B')),
+          ),
+          section('ENTITIES', ...insert('A'), ...insert('C', 70, 10, 71, 10)),
+          eof,
+        ),
+      )
+      expect(() => denormalise(parsed, { maxEntities: 200000 })).toThrow(
+        /too many/i,
+      )
+    })
+
+    it('the steps that place each copy are counted with it', () => {
+      // A chain of 50 blocks ending in 20 lines: under 300 units for the copies, inserts and places, over
+      // 1,000 once each line's 50 placing steps are counted. So 800 is refused and 2,000 is not.
+      const lines = Array.from({ length: 20 }, () => line()).flat()
+      const chain = Array.from({ length: 50 }, (_, i) =>
+        i === 49
+          ? block(`B${i}`, ...lines)
+          : block(`B${i}`, ...insert(`B${i + 1}`)),
+      )
+      const parsed = parseString(
+        dxf(
+          section('BLOCKS', ...chain.flat()),
+          section('ENTITIES', ...insert('B0')),
+          eof,
+        ),
+      )
+      expect(() => denormalise(parsed, { maxEntities: 800 })).toThrow(
+        /too many/i,
+      )
+      expect(denormalise(parsed, { maxEntities: 2000 }).length).toEqual(20)
+    })
+
+    it('toPolylines counts the points it draws against the same limit', () => {
+      const circle = [0, 'CIRCLE', 8, '0', 10, 0, 20, 0, 40, 1]
+      const parsed = parseString(
+        dxf(
+          section('BLOCKS', ...block('A', ...circle)),
+          section('ENTITIES', ...insert('A', 70, 100, 71, 100)),
+          eof,
+        ),
+      )
+      expect(denormalise(parsed, { maxEntities: 200000 }).length).toEqual(10000)
+      expect(() => toPolylines(parsed, { maxEntities: 200000 })).toThrow(
+        /too many/i,
+      )
+    })
+  })
 })
