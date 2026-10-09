@@ -970,4 +970,129 @@ describe('Hostile input', () => {
       ])
     })
   })
+
+  describe('the limit holds memory, not just entity counts', () => {
+    it('a long hatch outline counts by its points', () => {
+      const points = Array.from({ length: 1000 }, (_, i) => [
+        10,
+        i,
+        20,
+        0,
+      ]).flat()
+      const hatch = [
+        0,
+        'HATCH',
+        8,
+        '0',
+        100,
+        'AcDbHatch',
+        91,
+        1,
+        92,
+        2,
+        72,
+        0,
+        73,
+        1,
+        93,
+        1000,
+        ...points,
+        97,
+        0,
+      ]
+      const parsed = parseString(
+        dxf(
+          section('BLOCKS', ...block('A', ...hatch)),
+          section('ENTITIES', ...insert('A', 70, 10, 71, 10)),
+          eof,
+        ),
+      )
+      expect(() => denormalise(parsed, { maxEntities: 50000 })).toThrow(
+        /too many/i,
+      )
+    })
+
+    it('nested arrays are paid for before any of them is produced', function () {
+      this.timeout(2000)
+      const parsed = parseString(
+        dxf(
+          section(
+            'BLOCKS',
+            ...block('B', ...line()),
+            ...block('A', ...insert('B', 70, 100, 71, 100)),
+          ),
+          section('ENTITIES', ...insert('A', 70, 100, 71, 100)),
+          eof,
+        ),
+      )
+      expect(() => denormalise(parsed, { maxEntities: 5000000 })).toThrow(
+        /too many/i,
+      )
+    })
+
+    it('limits given as null mean the defaults', () => {
+      const parsed = parseString(
+        dxf(
+          section('BLOCKS', ...block('A', ...line())),
+          section('ENTITIES', ...insert('A')),
+          eof,
+        ),
+      )
+      expect(denormalise(parsed, null).length).toEqual(1)
+      expect(toPolylines(parsed, null).polylines.length).toEqual(1)
+    })
+
+    it('a missing block is reported once, however often it is inserted', () => {
+      const parsed = parseString(
+        dxf(
+          section(
+            'ENTITIES',
+            ...Array.from({ length: 1000 }, () => insert('X')).flat(),
+          ),
+          eof,
+        ),
+      )
+      const original = console.error
+      let calls = 0
+      console.error = () => {
+        calls += 1
+      }
+      try {
+        denormalise(parsed)
+      } finally {
+        console.error = original
+      }
+      expect(calls).toEqual(1)
+    })
+
+    it('a polyface mesh with a very long outline converts', function () {
+      this.timeout(60000)
+      // One chain of faces, each showing only its first edge, so the outline is one run of n + 1 points.
+      const n = 300000
+      // Built up pair by pair, since a list this long cannot be spread into a call.
+      const pairs = [0, 'SECTION', 2, 'ENTITIES', 0, 'POLYLINE', 8, '0', 70, 64]
+      for (let i = 0; i < n + 2; i++) {
+        pairs.push(0, 'VERTEX', 8, '0', 10, i, 20, i % 2, 70, 192)
+      }
+      for (let i = 0; i < n; i++) {
+        pairs.push(
+          0,
+          'VERTEX',
+          8,
+          '0',
+          70,
+          128,
+          71,
+          i + 1,
+          72,
+          -(i + 2),
+          73,
+          -(i + 3),
+        )
+      }
+      pairs.push(0, 'SEQEND', 0, 'ENDSEC', 0, 'EOF')
+      const { polylines } = toPolylines(parseString(dxf(pairs)))
+      expect(polylines[0].vertices.length).toEqual(n + 1)
+    })
+  })
 })

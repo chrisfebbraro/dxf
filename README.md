@@ -47,24 +47,26 @@ A file decides how deeply its blocks nest and how wide its arrays are, so flatte
 The same limits are taken by `denormalise`, `toPolylines`, `toSVG` and `Helper`:
 
 ```
-import { parseString, denormalise, toPolylines, Helper, DEFAULT_LIMITS } from 'dxf'
+import { parseString, denormalise, toPolylines, Helper } from 'dxf'
 
-const limits = { maxDepth: 16, maxEntities: 50000 }
-const entities = denormalise(parseString(text), limits)
-const { polylines } = toPolylines(parseString(text), limits)
+const limits = { maxDepth: 16, maxEntities: 1000000 }
+const parsed = parseString(text)
+const entities = denormalise(parsed, limits)
+const { polylines } = toPolylines(parsed, limits)
 const helper = new Helper(text, limits)
 ```
 
 - A block nested deeper than `maxDepth` inserts (default 64), or one that inserts itself, is skipped.
-- `maxEntities` (default 10,000,000) bounds what block insertion produces. Each entity produced counts
-  one plus its vertices and control points; every `INSERT` counts one, even one that is skipped; a whole
-  array is counted before any of it is produced. Entities written directly in the file are bounded by
-  the file's size and are not counted. Past the limit, flattening throws an error with
-  `code: 'DXF_TOO_MANY_ENTITIES'`. A limit that is missing, negative or not a number falls back to the
-  default.
+- `maxEntities` (default 20,000,000) bounds what block insertion would produce, and is checked before
+  any of it is produced: every value each copied entity carries (coordinates, vertices, control points,
+  hatch outlines and the rest), times every array place, through every level of nested inserts, plus
+  one for each `INSERT`, including those that will be skipped. Entities written directly in the file are
+  bounded by the file's size and are not counted. Past the limit, flattening throws an error with
+  `code: 'DXF_TOO_MANY_ENTITIES'`. Limits that are missing, `null`, negative or not a number fall back to
+  the defaults, which are exported as `DEFAULT_LIMITS`.
 - Names from the file (blocks, layers, styles, entity types) are ordinary keys: a layer or block named
   `__proto__` or `constructor` is stored and found like any other. The tables and layer groups handed
-  back are plain objects.
+  back are plain objects. A missing block is reported once, however often it is inserted.
 - Empty sections, values outside any entity or table row, and fields that arrive before the vertex,
   control point, edge or seed they belong to are skipped rather than thrown on.
 - A spline whose degree, knots or weights do not fit its control points is drawn through its control

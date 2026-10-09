@@ -206,7 +206,7 @@ export default (entity, options) => {
     if (entity.polyfaceMesh) {
       // Only return the first polyline because we can't return many
       // A mesh with no face left to draw draws nothing.
-      polyline.push(...(polyfaceOutline(entity)[0] || []))
+      polyline = (polyfaceOutline(entity)[0] || []).slice()
     } else if (entity.polygonMesh) {
       // Do not attempt to render polygon meshes
     } else if (entity.vertices.length) {
