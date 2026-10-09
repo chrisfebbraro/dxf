@@ -1,4 +1,5 @@
 import logger from '../util/logger'
+import dict from '../util/dict'
 import point from './entity/point'
 import line from './entity/line'
 import lwpolyline from './entity/lwpolyline'
@@ -44,7 +45,7 @@ const handlers = [
 ].reduce((acc, mod) => {
   acc[mod.TYPE] = mod
   return acc
-}, {})
+}, dict())
 
 export default (tuples) => {
   const entities = []
@@ -58,7 +59,8 @@ export default (tuples) => {
       currentEntityTuples = []
       entityGroups.push(currentEntityTuples)
     }
-    currentEntityTuples.push(tuple)
+    // Values before the first entity belong to none, and are skipped.
+    if (currentEntityTuples) currentEntityTuples.push(tuple)
   })
 
   let currentPolyline

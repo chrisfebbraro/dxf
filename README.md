@@ -41,6 +41,23 @@ console.log('svg:', helper.toSVG())
 console.log('polylines:', helper.toPolylines())
 ```
 
+## Untrusted files
+
+A file decides how deeply its blocks nest and how wide its arrays are, so flattening is bounded:
+
+```
+import { parseString, denormalise } from 'dxf'
+
+const entities = denormalise(parseString(text), { maxDepth: 16, maxEntities: 50000 })
+```
+
+- A block nested deeper than `maxDepth` inserts (default 64), or one that inserts itself, is skipped.
+- Past `maxEntities` units of work (default 1,000,000) — entities produced plus array places visited —
+  `denormalise` throws an error with `code: 'DXF_TOO_MANY_ENTITIES'`.
+- Names from the file (blocks, layers, styles, entity types) are kept in prototype-free lookups, so a
+  name such as `__proto__` or `constructor` is an ordinary name.
+- Empty sections and values outside any entity or table row are skipped rather than thrown on.
+
 ## Running the Examples
 
 Node ES5. Will write an SVG to `examples/example.es5.svg`:

@@ -1,12 +1,39 @@
 import cloneDeep from 'lodash/cloneDeep'
 
 import logger from './util/logger'
+import dict from './util/dict'
 
-export default (parseResult) => {
+// LIMITS ON FLATTENING, since a file decides how far its blocks nest and how wide its arrays are. A block
+// nested deeper than `maxDepth` inserts is left out, as is one that inserts itself; more than
+// `maxEntities` units of work — entities produced plus array places visited — throws, with code
+// DXF_TOO_MANY_ENTITIES, rather than run on.
+export const DEFAULT_LIMITS = { maxDepth: 64, maxEntities: 1000000 }
+
+// The error thrown when flattening would pass `max`.
+const tooMany = (max) =>
+  Object.assign(
+    new Error(`DXF expands to too many entities (more than ${max})`),
+    {
+      code: 'DXF_TOO_MANY_ENTITIES',
+    },
+  )
+
+// An array count as a whole number of at least one; anything else counts as one.
+const arrayCount = (n) => (Number.isFinite(n) && n >= 1 ? Math.floor(n) : 1)
+
+export default (parseResult, limits = {}) => {
+  const { maxDepth, maxEntities } = { ...DEFAULT_LIMITS, ...limits }
   const blocksByName = parseResult.blocks.reduce((acc, b) => {
     acc[b.name] = b
     return acc
-  }, {})
+  }, dict())
+  // The blocks being inserted along the current path, so one that inserts itself is caught.
+  const inserting = new Set()
+  let work = 0
+  const spend = (units) => {
+    work += units
+    if (work > maxEntities) throw tooMany(maxEntities)
+  }
 
   const gatherEntities = (entities, transforms) => {
     let current = []
@@ -18,9 +45,24 @@ export default (parseResult) => {
           logger.error('no block found for insert. block:', insert.block)
           return
         }
+        if (inserting.has(insert.block)) {
+          logger.warn('block inserts itself, skipped:', insert.block)
+          return
+        }
+        if (transforms.length >= maxDepth) {
+          logger.warn(
+            'blocks nested deeper than',
+            maxDepth,
+            'skipped at:',
+            insert.block,
+          )
+          return
+        }
 
-        const rowCount = insert.rowCount ?? 1
-        const columnCount = insert.columnCount ?? 1
+        const rowCount = arrayCount(insert.rowCount)
+        const columnCount = arrayCount(insert.columnCount)
+        // Every place in the array is work, even for a block with nothing in it.
+        spend(rowCount * columnCount)
         const rowSpacing = insert.rowSpacing ?? 0
         const columnSpacing = insert.columnSpacing ?? 0
         const rotation = insert.rotation ?? 0
@@ -98,7 +140,14 @@ export default (parseResult) => {
               }
               return be2
             })
-            current = current.concat(gatherEntities(blockEntities, transforms2))
+            inserting.add(insert.block)
+            try {
+              current = current.concat(
+                gatherEntities(blockEntities, transforms2),
+              )
+            } finally {
+              inserting.delete(insert.block)
+            }
           }
         }
       } else {
@@ -106,6 +155,7 @@ export default (parseResult) => {
         // The transforms are reversed so they occur in
         // order of application - i.e. the transform of the
         // top-level insert is applied last
+        spend(1)
         const e2 = cloneDeep(e)
         e2.transforms = transforms.slice().reverse()
         current.push(e2)

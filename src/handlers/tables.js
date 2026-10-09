@@ -1,4 +1,5 @@
 import logger from '../util/logger'
+import dict from '../util/dict'
 
 const ltypeHandler = (tuples) => {
   let element = null
@@ -8,6 +9,7 @@ const ltypeHandler = (tuples) => {
       const type = tuple[0]
       const value = tuple[1]
       // https://documentation.help/AutoCAD-DXF/WS1a9193826455f5ff18cb41610ec0a2e719-7a4f.htm
+      // The element and offset fields belong to an element; one given before its element is skipped.
       switch (type) {
         case 2:
           layer.name = value
@@ -40,6 +42,7 @@ const ltypeHandler = (tuples) => {
           }
           break
         case 74:
+          if (!element) break
           // Complex linetype element type (one per element). Default is 0 (no embedded shape/text) (bit-coded values)
           //  1 = If set, code 50 specifies an absolute rotation; if not set, code 50 specifies a relative rotation
           //  2 = Embedded element is a text string
@@ -47,25 +50,32 @@ const ltypeHandler = (tuples) => {
           element.shape = value
           break
         case 75:
+          if (!element) break
           element.shapeNumber = value
           break
         case 340:
+          if (!element) break
           element.styleHandle = value
           break
         case 46:
+          if (!element) break
           element.scales.push(value)
           break
         case 50:
+          if (!element) break
           element.rotation = value
           break
         case 44:
+          if (!element) break
           offset = Object.create({ x: value, y: 0 })
           element.offset.push(offset)
           break
         case 45:
+          if (!offset) break
           offset.y = value
           break
         case 9:
+          if (!element) break
           element.text = value
           break
         default:
@@ -280,7 +290,8 @@ const tableHandler = (tuples, tableType, handler) => {
     if ((type === 0 || type === 2) && value === tableType) {
       tableRowTuples = []
       tableRowsTuples.push(tableRowTuples)
-    } else {
+    } else if (tableRowTuples) {
+      // Values before the first row belong to none, and are skipped.
       tableRowTuples.push(tuple)
     }
   })
@@ -293,7 +304,7 @@ const tableHandler = (tuples, tableType, handler) => {
       logger.warn('table row without name:', tableRow)
     }
     return acc
-  }, {})
+  }, dict())
 }
 
 export default (tuples) => {
@@ -307,7 +318,8 @@ export default (tuples) => {
       tableGroups.push(tableTuples)
     } else if (value === 'ENDTAB') {
       tableGroups.push(tableTuples)
-    } else {
+    } else if (tableTuples) {
+      // Values before the first table belong to none, and are skipped.
       tableTuples.push(tuple)
     }
   })
@@ -317,6 +329,7 @@ export default (tuples) => {
   let vPortTuples = []
   let ltypeTuples = []
   tableGroups.forEach((group) => {
+    if (!group || !group.length) return
     if (group[0][1] === 'STYLE') {
       stylesTuples = group
     } else if (group[0][1] === 'LTYPE') {

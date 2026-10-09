@@ -53,6 +53,8 @@ const separateSections = (tuples) => {
 // Each section start with the type tuple, then proceeds
 // with the contents of the section
 const reduceSection = (acc, section) => {
+  // A SECTION closed by ENDSEC with nothing between them has no type, and is skipped.
+  if (!section || !section.length) return acc
   const sectionType = section[0][1]
   const contentTuples = section.slice(1)
   switch (sectionType) {

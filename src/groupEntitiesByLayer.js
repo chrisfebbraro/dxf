@@ -1,3 +1,5 @@
+import dict from './util/dict'
+
 export default (entities) => {
   return entities.reduce((acc, entity) => {
     const layer = entity.layer
@@ -6,5 +8,5 @@ export default (entities) => {
     }
     acc[layer].push(entity)
     return acc
-  }, {})
+  }, dict())
 }
