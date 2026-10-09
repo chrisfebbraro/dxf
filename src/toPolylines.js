@@ -5,11 +5,12 @@ import denormalise from './denormalise'
 import entityToPolyline from './entityToPolyline'
 import applyTransforms from './applyTransforms'
 import logger from './util/logger'
+import { own } from './util/dict'
 
-export default (parsed) => {
-  const entities = denormalise(parsed)
+export default (parsed, limits) => {
+  const entities = denormalise(parsed, limits)
   const polylines = entities.map((entity) => {
-    const layerTable = parsed.tables.layers[entity.layer]
+    const layerTable = own(parsed.tables.layers, entity.layer)
     let colorNumber = 0
     if ('colorNumber' in entity) {
       colorNumber = entity.colorNumber

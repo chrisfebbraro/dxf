@@ -1,22 +1,37 @@
-// DAMAGED FILES. Cuts, drops, changes and inserts pairs in every sample file under test/resources, then
-// reports each distinct way parsing, flattening, polylines or SVG throws. Seeded, so a run is repeatable.
+// Damaged files: cuts, drops, changes and inserts pairs in every sample file under test/resources, then
+// reports each distinct way parsing, flattening, polylines or SVG throws. Each file is damaged from its
+// own seed, so a run is repeatable on any machine.
 //
 //   npm run test:fuzz
 //
 // Exits 1 if anything throws other than the deliberate DXF_TOO_MANY_ENTITIES limit.
-const fs = require('fs')
-const path = require('path')
-const { parseString, denormalise, toPolylines, toSVG, config } = require(
-  path.resolve('src'),
-)
-config.verbose = false
+import fs from 'fs'
+import path from 'path'
 
-const dir = path.resolve('test/resources')
-const files = fs.readdirSync(dir).filter((f) => f.endsWith('.dxf'))
-let seed = 12345
+import { parseString, denormalise, toPolylines, toSVG, config } from '../src'
+
+config.verbose = false
+// The library's own error log would bury the report; failures are collected below instead.
+console.error = () => {}
+
+const dir = path.join(__dirname, 'resources')
+const files = fs
+  .readdirSync(dir)
+  .filter((f) => f.endsWith('.dxf'))
+  .sort()
+
+// mulberry32: a small generator whose every bit is used, seeded per file.
+let state = 0
+const reseed = (text) => {
+  state = 2166136261
+  for (let i = 0; i < text.length; i++)
+    state = Math.imul(state ^ text.charCodeAt(i), 16777619)
+}
 const rand = (n) => {
-  seed = (seed * 1103515245 + 12345) % 2147483648
-  return seed % n
+  state = (state + 0x6d2b79f5) | 0
+  let t = Math.imul(state ^ (state >>> 15), 1 | state)
+  t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
+  return ((t ^ (t >>> 14)) >>> 0) % n
 }
 
 // Ways a file can be damaged: cut short, a pair dropped, a value changed, two pairs swapped.
@@ -98,13 +113,15 @@ const mutations = [
 ]
 
 const seen = new Map()
+const limits = { maxEntities: 200000 }
 const stages = {
   parse: parseString,
-  flatten: (p) => denormalise(p, { maxEntities: 200000 }),
-  polylines: toPolylines,
-  svg: toSVG,
+  flatten: (p) => denormalise(p, limits),
+  polylines: (p) => toPolylines(p, limits),
+  svg: (p) => toSVG(p, limits),
 }
 for (const file of files) {
+  reseed(file)
   const lines = fs
     .readFileSync(path.join(dir, file), 'utf-8')
     .split(/\r\n|\r|\n/g)

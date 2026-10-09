@@ -1,5 +1,5 @@
 import logger from '../util/logger'
-import dict from '../util/dict'
+import { define } from '../util/dict'
 
 const ltypeHandler = (tuples) => {
   let element = null
@@ -299,12 +299,12 @@ const tableHandler = (tuples, tableType, handler) => {
   return tableRowsTuples.reduce((acc, rowTuples) => {
     const tableRow = handler(rowTuples)
     if (tableRow.name) {
-      acc[tableRow.name] = tableRow
+      define(acc, tableRow.name, tableRow)
     } else {
       logger.warn('table row without name:', tableRow)
     }
     return acc
-  }, dict())
+  }, {})
 }
 
 export default (tuples) => {

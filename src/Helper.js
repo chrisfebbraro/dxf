@@ -6,11 +6,13 @@ import toPolylines from './toPolylines'
 import groupEntitiesByLayer from './groupEntitiesByLayer'
 
 export default class Helper {
-  constructor(contents) {
+  // `limits` bound flattening, as denormalise's do.
+  constructor(contents, limits) {
     if (!(typeof contents === 'string')) {
       throw Error('Helper constructor expects a DXF string')
     }
     this._contents = contents
+    this._limits = limits
     this._parsed = null
     this._denormalised = null
   }
@@ -29,7 +31,7 @@ export default class Helper {
   }
 
   denormalise() {
-    this._denormalised = denormalise(this.parsed)
+    this._denormalised = denormalise(this.parsed, this._limits)
     logger.info('denormalised:', this._denormalised)
     return this._denormalised
   }
@@ -53,10 +55,10 @@ export default class Helper {
   }
 
   toSVG() {
-    return toSVG(this.parsed)
+    return toSVG(this.parsed, this._limits)
   }
 
   toPolylines() {
-    return toPolylines(this.parsed)
+    return toPolylines(this.parsed, this._limits)
   }
 }

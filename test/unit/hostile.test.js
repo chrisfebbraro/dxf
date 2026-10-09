@@ -6,9 +6,10 @@ import {
   groupEntitiesByLayer,
   toPolylines,
   toSVG,
+  Helper,
 } from '../../src'
 
-// UNTRUSTED FILES. Each case is a file someone could upload on purpose or by accident; none may throw a
+// Untrusted files. Each case is a file someone could upload on purpose or by accident; none may throw a
 // TypeError, recurse until the stack runs out, or expand without bound.
 
 // A DXF document from group code / value pairs.
@@ -691,6 +692,282 @@ describe('Hostile input', () => {
         ),
       )
       expect(() => toPolylines(parsed)).not.toThrow()
+    })
+  })
+
+  describe('limits that stay out of the way of real drawings', () => {
+    // A block holding one polyline of `n` vertices.
+    const longPolyline = (n) => [
+      0,
+      'LWPOLYLINE',
+      8,
+      '0',
+      ...Array.from({ length: n }, (_, i) => [10, i, 20, 0]).flat(),
+    ]
+
+    it('shapes written directly in the file are not counted against the limit', () => {
+      const lines = Array.from({ length: 2000 }, () => line()).flat()
+      const parsed = parseString(dxf(section('ENTITIES', ...lines), eof))
+      expect(denormalise(parsed, { maxEntities: 1000 }).length).toEqual(2000)
+    })
+
+    it('a large array of a small block flattens in reasonable time', function () {
+      this.timeout(4000)
+      const parsed = parseString(
+        dxf(
+          section('BLOCKS', ...block('A', ...line())),
+          section('ENTITIES', ...insert('A', 70, 300, 71, 300)),
+          eof,
+        ),
+      )
+      expect(denormalise(parsed).length).toEqual(90000)
+    })
+
+    it('inserts that are skipped still count against the limit', () => {
+      const selves = Array.from({ length: 50 }, () => insert('A')).flat()
+      const parsed = parseString(
+        dxf(
+          section('BLOCKS', ...block('A', ...selves)),
+          section('ENTITIES', ...insert('A', 70, 100, 71, 100)),
+          eof,
+        ),
+      )
+      expect(() => denormalise(parsed, { maxEntities: 10000 })).toThrow(
+        /too many/i,
+      )
+    })
+
+    it('a limit given as undefined or NaN falls back to the default rather than switching it off', () => {
+      const parsed = parseString(
+        dxf(
+          section('BLOCKS', ...block('A', ...line())),
+          section('ENTITIES', ...insert('A', 70, 10000, 71, 10000)),
+          eof,
+        ),
+      )
+      expect(() => denormalise(parsed, { maxEntities: undefined })).toThrow(
+        /too many/i,
+      )
+      expect(() =>
+        denormalise(parsed, { maxEntities: NaN, maxDepth: NaN }),
+      ).toThrow(/too many/i)
+    })
+
+    it('a long polyline counts by its vertices', () => {
+      const parsed = parseString(
+        dxf(
+          section('BLOCKS', ...block('A', ...longPolyline(1000))),
+          section('ENTITIES', ...insert('A', 70, 10, 71, 10)),
+          eof,
+        ),
+      )
+      expect(() => denormalise(parsed, { maxEntities: 50000 })).toThrow(
+        /too many/i,
+      )
+    })
+
+    it('toPolylines, toSVG and Helper take the same limits', () => {
+      const text = dxf(
+        section('BLOCKS', ...block('A', ...line())),
+        section('ENTITIES', ...insert('A', 70, 10, 71, 10)),
+        eof,
+      )
+      const parsed = parseString(text)
+      expect(() => toPolylines(parsed, { maxEntities: 10 })).toThrow(
+        /too many/i,
+      )
+      expect(() => toSVG(parsed, { maxEntities: 10 })).toThrow(/too many/i)
+      expect(() => new Helper(text, { maxEntities: 10 }).denormalised).toThrow(
+        /too many/i,
+      )
+      expect(toPolylines(parsed).polylines.length).toEqual(100)
+    })
+  })
+
+  describe('what callers are handed back', () => {
+    it('table and layer lookups are plain objects, whatever their keys', () => {
+      const parsed = parseString(
+        dxf(
+          section(
+            'TABLES',
+            0,
+            'TABLE',
+            2,
+            'LAYER',
+            0,
+            'LAYER',
+            2,
+            'WALLS',
+            0,
+            'LAYER',
+            2,
+            '__proto__',
+            0,
+            'ENDTAB',
+          ),
+          section('ENTITIES', ...line('WALLS')),
+          eof,
+        ),
+      )
+      const layers = parsed.tables.layers
+      const groups = groupEntitiesByLayer(denormalise(parsed))
+      // Called on the objects directly, as existing callers do; that is what this case protects.
+      /* eslint-disable no-prototype-builtins */
+      expect([
+        layers.hasOwnProperty('WALLS'),
+        String(layers),
+        layers instanceof Object,
+      ]).toEqual([true, '[object Object]', true])
+      expect([
+        groups.hasOwnProperty('WALLS'),
+        groups instanceof Object,
+      ]).toEqual([true, true])
+      /* eslint-enable no-prototype-builtins */
+    })
+
+    it('a polyface mesh whose faces all name missing vertices draws nothing', () => {
+      const parsed = parseString(
+        dxf(
+          section(
+            'ENTITIES',
+            0,
+            'POLYLINE',
+            8,
+            '0',
+            70,
+            64,
+            0,
+            'VERTEX',
+            8,
+            '0',
+            10,
+            0,
+            20,
+            0,
+            70,
+            192,
+            0,
+            'VERTEX',
+            8,
+            '0',
+            70,
+            128,
+            71,
+            1,
+            72,
+            2,
+            73,
+            9,
+            0,
+            'SEQEND',
+          ),
+          eof,
+        ),
+      )
+      expect(() => toPolylines(parsed)).not.toThrow()
+    })
+
+    it('an edge field after a polyline boundary names an edge type is skipped', () => {
+      const parsed = parseString(
+        dxf(
+          section(
+            'ENTITIES',
+            0,
+            'HATCH',
+            8,
+            '0',
+            100,
+            'AcDbHatch',
+            91,
+            1,
+            92,
+            2,
+            72,
+            1,
+            11,
+            1,
+            21,
+            1,
+            97,
+            0,
+          ),
+          eof,
+        ),
+      )
+      expect(parsed.entities[0].boundary.loops.length).toEqual(1)
+    })
+  })
+
+  describe('found by the fuzzer', () => {
+    it('an edge boundary that follows a polyline boundary is read as an edge boundary', () => {
+      const parsed = parseString(
+        dxf(
+          section(
+            'ENTITIES',
+            0,
+            'HATCH',
+            8,
+            '0',
+            100,
+            'AcDbHatch',
+            91,
+            2,
+            92,
+            2,
+            72,
+            0,
+            93,
+            0,
+            92,
+            1,
+            10,
+            1,
+            20,
+            2,
+            97,
+            0,
+          ),
+          eof,
+        ),
+      )
+      expect(parsed.entities[0].boundary.loops.length).toEqual(2)
+    })
+
+    it('a spline whose knots run backwards is drawn through its control points', () => {
+      const parsed = parseString(
+        dxf(
+          section(
+            'ENTITIES',
+            0,
+            'SPLINE',
+            8,
+            '0',
+            71,
+            1,
+            40,
+            3,
+            40,
+            2,
+            40,
+            1,
+            40,
+            0,
+            10,
+            0,
+            20,
+            0,
+            10,
+            1,
+            20,
+            1,
+          ),
+          eof,
+        ),
+      )
+      expect(toPolylines(parsed).polylines[0].vertices).toEqual([
+        [0, 0],
+        [1, 1],
+      ])
     })
   })
 })

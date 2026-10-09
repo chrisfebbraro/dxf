@@ -37,7 +37,7 @@ export const process = (tuples) => {
                 y: 0,
                 bulge: 0,
               }
-              loop.entities[0].points.push(polyPoint)
+              if (loop.entities[0]) loop.entities[0].points.push(polyPoint)
             } else if (status === 'SEED') {
               if (!seed) {
                 seed = { x: 0, y: 0 }
@@ -97,6 +97,9 @@ export const process = (tuples) => {
               }
               loop.entities.push(ent)
               status = 'POLYLINE'
+            } else if (status === 'POLYLINE') {
+              // An edge boundary begun before a polyline boundary was closed is read as edges.
+              status = 'IDLE'
             }
           }
           break

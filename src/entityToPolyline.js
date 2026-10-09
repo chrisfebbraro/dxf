@@ -114,7 +114,10 @@ export const splineIsValid = (entity) => {
     degree >= 1 &&
     degree <= n - 1 &&
     knots.length === n + degree + 1 &&
-    knots.every(Number.isFinite) &&
+    knots.every(
+      (k, i) => Number.isFinite(k) && (i === 0 || k >= knots[i - 1]),
+    ) &&
+    knots[degree] < knots[knots.length - 1 - degree] &&
     (!entity.weights || entity.weights.length === n)
   )
 }
@@ -143,7 +146,6 @@ export const polyfaceOutline = (entity) => {
   const usable = faces.filter((f) =>
     f.indices.every((i) => i >= 0 && i < vertices.length),
   )
-  faces.splice(0, faces.length, ...usable)
 
   // If a segment starts at the end of a previous line, continue it
   const polylines = []
@@ -156,7 +158,7 @@ export const polyfaceOutline = (entity) => {
     polylines.push([a, b])
   }
 
-  for (const face of faces) {
+  for (const face of usable) {
     for (let beg = 0; beg < face.indices.length; beg++) {
       if (face.hiddens[beg]) {
         continue
@@ -203,7 +205,8 @@ export default (entity, options) => {
     polyline = []
     if (entity.polyfaceMesh) {
       // Only return the first polyline because we can't return many
-      polyline.push(...polyfaceOutline(entity)[0])
+      // A mesh with no face left to draw draws nothing.
+      polyline.push(...(polyfaceOutline(entity)[0] || []))
     } else if (entity.polygonMesh) {
       // Do not attempt to render polygon meshes
     } else if (entity.vertices.length) {

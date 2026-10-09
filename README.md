@@ -43,19 +43,28 @@ console.log('polylines:', helper.toPolylines())
 
 ## Untrusted files
 
-A file decides how deeply its blocks nest and how wide its arrays are, so flattening is bounded:
+A file decides how deeply its blocks nest and how wide its arrays are, so flattening blocks is bounded.
+The same limits are taken by `denormalise`, `toPolylines`, `toSVG` and `Helper`:
 
 ```
-import { parseString, denormalise } from 'dxf'
+import { parseString, denormalise, toPolylines, Helper, DEFAULT_LIMITS } from 'dxf'
 
-const entities = denormalise(parseString(text), { maxDepth: 16, maxEntities: 50000 })
+const limits = { maxDepth: 16, maxEntities: 50000 }
+const entities = denormalise(parseString(text), limits)
+const { polylines } = toPolylines(parseString(text), limits)
+const helper = new Helper(text, limits)
 ```
 
 - A block nested deeper than `maxDepth` inserts (default 64), or one that inserts itself, is skipped.
-- Past `maxEntities` units of work (default 1,000,000) — entities produced plus array places visited —
-  `denormalise` throws an error with `code: 'DXF_TOO_MANY_ENTITIES'`.
-- Names from the file (blocks, layers, styles, entity types) are kept in prototype-free lookups, so a
-  name such as `__proto__` or `constructor` is an ordinary name.
+- `maxEntities` (default 10,000,000) bounds what block insertion produces. Each entity produced counts
+  one plus its vertices and control points; every `INSERT` counts one, even one that is skipped; a whole
+  array is counted before any of it is produced. Entities written directly in the file are bounded by
+  the file's size and are not counted. Past the limit, flattening throws an error with
+  `code: 'DXF_TOO_MANY_ENTITIES'`. A limit that is missing, negative or not a number falls back to the
+  default.
+- Names from the file (blocks, layers, styles, entity types) are ordinary keys: a layer or block named
+  `__proto__` or `constructor` is stored and found like any other. The tables and layer groups handed
+  back are plain objects.
 - Empty sections, values outside any entity or table row, and fields that arrive before the vertex,
   control point, edge or seed they belong to are skipped rather than thrown on.
 - A spline whose degree, knots or weights do not fit its control points is drawn through its control

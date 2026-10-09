@@ -66,13 +66,8 @@ const lwpolyline = (entity) => {
     bbox: bbox0,
     element: element0,
   })
-  return transformBoundingBoxAndElement(
-    bbox,
-    element,
-    entity.transforms,
-  )
+  return transformBoundingBoxAndElement(bbox, element, entity.transforms)
 }
-
 
 /**
  * Create a <circle /> element for the CIRCLE entity.
@@ -360,8 +355,8 @@ const entityToBoundsAndElement = (entity) => {
   }
 }
 
-export default (parsed) => {
-  const entities = denormalise(parsed)
+export default (parsed, limits) => {
+  const entities = denormalise(parsed, limits)
   const { bbox, elements } = entities.reduce(
     (acc, entity, i) => {
       const rgb = getRGBForEntity(parsed.tables.layers, entity)

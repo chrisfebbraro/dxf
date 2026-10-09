@@ -1,6 +1,6 @@
 import config from './config'
 import parseString from './parseString'
-import denormalise from './denormalise'
+import denormalise, { DEFAULT_LIMITS } from './denormalise'
 import groupEntitiesByLayer from './groupEntitiesByLayer'
 import toPolylines from './toPolylines'
 import toSVG from './toSVG'
@@ -11,6 +11,7 @@ export {
   config,
   parseString,
   denormalise,
+  DEFAULT_LIMITS,
   groupEntitiesByLayer,
   toPolylines,
   toSVG,

@@ -1,8 +1,9 @@
 import colors from './util/colors'
 import logger from './util/logger'
+import { own } from './util/dict'
 
 export default (layers, entity) => {
-  const layerTable = layers[entity.layer]
+  const layerTable = own(layers, entity.layer)
   if (layerTable) {
     const colorDefinedInEntity =
       'colorNumber' in entity && entity.colorNumber !== 256
