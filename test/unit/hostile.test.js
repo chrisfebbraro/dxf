@@ -1154,4 +1154,39 @@ describe('Hostile input', () => {
       )
     })
   })
+
+  describe('what drawing produces', () => {
+    const circle = [0, 'CIRCLE', 8, '0', 10, 0, 20, 0, 40, 1]
+
+    it('toPolylines does not count the points of shapes written directly in the file', () => {
+      const circles = Array.from({ length: 2000 }, () => circle).flat()
+      const parsed = parseString(dxf(section('ENTITIES', ...circles), eof))
+      expect(
+        toPolylines(parsed, { maxEntities: 1000 }).polylines.length,
+      ).toEqual(2000)
+    })
+
+    it('toSVG refuses output longer than maxSvgLength rather than building it', () => {
+      const parsed = parseString(
+        dxf(
+          section('BLOCKS', ...block('A', ...circle)),
+          section('ENTITIES', ...insert('A', 70, 100, 71, 100)),
+          eof,
+        ),
+      )
+      expect(() => toSVG(parsed, { maxSvgLength: 100000 })).toThrow(
+        /characters/i,
+      )
+      expect(typeof toSVG(parsed)).toEqual('string')
+    })
+
+    it('a polyline with many bulged vertices converts in linear time', function () {
+      this.timeout(3000)
+      const pairs = [0, 'SECTION', 2, 'ENTITIES', 0, 'LWPOLYLINE', 8, '0']
+      for (let i = 0; i < 20000; i++) pairs.push(10, i, 20, 0, 42, 0.5)
+      pairs.push(0, 'ENDSEC', 0, 'EOF')
+      const { polylines } = toPolylines(parseString(dxf(pairs)))
+      expect(polylines[0].vertices.length).toBeGreaterThan(20000)
+    })
+  })
 })

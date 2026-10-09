@@ -1,7 +1,7 @@
 import { Box2 } from 'vecks'
 
 import entityToPolyline from './entityToPolyline'
-import denormalise from './denormalise'
+import denormalise, { resolveLimits } from './denormalise'
 import getRGBForEntity from './getRGBForEntity'
 import logger from './util/logger'
 import rotate from './util/rotate'
@@ -357,6 +357,9 @@ const entityToBoundsAndElement = (entity) => {
 
 export default (parsed, limits) => {
   const entities = denormalise(parsed, limits)
+  // The output is counted as it is built, and refused before it passes the longest string allowed.
+  const { maxSvgLength } = resolveLimits(limits)
+  let length = 0
   const { bbox, elements } = entities.reduce(
     (acc, entity, i) => {
       const rgb = getRGBForEntity(parsed.tables.layers, entity)
@@ -369,9 +372,15 @@ export default (parsed, limits) => {
           acc.bbox.expandByPoint(bbox.min)
           acc.bbox.expandByPoint(bbox.max)
         }
-        acc.elements.push(
-          `<g stroke="${rgbToColorAttribute(rgb)}">${element}</g>`,
-        )
+        const g = `<g stroke="${rgbToColorAttribute(rgb)}">${element}</g>`
+        length += g.length + 1
+        if (length > maxSvgLength) {
+          throw Object.assign(
+            new Error(`SVG output would pass ${maxSvgLength} characters`),
+            { code: 'DXF_OUTPUT_TOO_LARGE' },
+          )
+        }
+        acc.elements.push(g)
       }
       return acc
     },

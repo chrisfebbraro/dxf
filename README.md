@@ -49,7 +49,7 @@ The same limits are taken by `denormalise`, `toPolylines`, `toSVG` and `Helper`:
 ```
 import { parseString, denormalise, toPolylines, Helper } from 'dxf'
 
-const limits = { maxDepth: 16, maxEntities: 1000000 }
+const limits = { maxDepth: 16, maxEntities: 1000000, maxSvgLength: 50000000 }
 const parsed = parseString(text)
 const entities = denormalise(parsed, limits)
 const { polylines } = toPolylines(parsed, limits)
@@ -62,10 +62,14 @@ const helper = new Helper(text, limits)
   rest) plus the placing steps it carries, one for every array place, and one for every `INSERT`,
   including those that will be skipped. A top-level insert whose whole expansion is estimated past the
   limit is refused before any of it is produced. Entities written directly in the file are bounded by
-  the file's size and are not counted. `toPolylines` also counts the points it draws against the same
-  limit, since a circle becomes dozens of them. Past the limit, an error is thrown with
-  `code: 'DXF_TOO_MANY_ENTITIES'`. Limits that are missing, `null`, negative or not a number fall back to
-  the defaults, which are exported as `DEFAULT_LIMITS`.
+  the file's size and are not counted. `toPolylines` also counts the points it draws for those copies
+  against the same limit, since a circle becomes dozens of them. Past the limit, an error is thrown with
+  `code: 'DXF_TOO_MANY_ENTITIES'`.
+- `maxSvgLength` (default 500,000,000 characters) bounds `toSVG`'s output, which is counted as it is
+  built; past it, an error is thrown with `code: 'DXF_OUTPUT_TOO_LARGE'` rather than the engine running
+  out of string length.
+- Limits that are missing, `null`, negative or not a number fall back to the defaults, which are
+  exported as `DEFAULT_LIMITS`.
 - Names from the file (blocks, layers, styles, entity types) are ordinary keys: a layer or block named
   `__proto__` or `constructor` is stored and found like any other. The tables and layer groups handed
   back are plain objects. A missing block is reported once, however often it is inserted.

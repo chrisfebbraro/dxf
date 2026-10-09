@@ -218,9 +218,14 @@ export default (entity, options) => {
         const to = [entity.vertices[i + 1].x, entity.vertices[i + 1].y]
         polyline.push(from)
         if (entity.vertices[i].bulge) {
-          polyline = polyline.concat(
-            createArcForLWPolyine(from, to, entity.vertices[i].bulge),
-          )
+          // Appended in place: concatenating per vertex made a polyline of n bulges cost n squared.
+          for (const p of createArcForLWPolyine(
+            from,
+            to,
+            entity.vertices[i].bulge,
+          )) {
+            polyline.push(p)
+          }
         }
         // The last iteration of the for loop
         if (i === il - 2) {

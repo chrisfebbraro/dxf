@@ -9,7 +9,8 @@ import { own } from './util/dict'
 
 export default (parsed, limits) => {
   const entities = denormalise(parsed, limits)
-  // The points drawn are counted against the same limit: a circle becomes dozens of them.
+  // The points drawn for copies made by block insertion are counted against the same limit, since a
+  // circle becomes dozens of them; those of entities written directly in the file are bounded by its size.
   const { maxEntities } = resolveLimits(limits)
   let points = 0
   const polylines = entities.map((entity) => {
@@ -27,8 +28,10 @@ export default (parsed, limits) => {
     }
 
     const outline = entityToPolyline(entity)
-    points += outline.length
-    if (points > maxEntities) throw tooMany(maxEntities)
+    if (entity.transforms && entity.transforms.length) {
+      points += outline.length
+      if (points > maxEntities) throw tooMany(maxEntities)
+    }
     return {
       rgb: colors[colorNumber],
       layer: layerTable,

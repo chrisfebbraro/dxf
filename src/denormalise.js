@@ -11,7 +11,13 @@ import dict from './util/dict'
 // whole expansion is estimated past the limit is refused before any of it is produced. A block nested
 // deeper than `maxDepth` inserts, or one that inserts itself, is skipped; past `maxEntities` units,
 // flattening throws an Error with code DXF_TOO_MANY_ENTITIES.
-export const DEFAULT_LIMITS = { maxDepth: 64, maxEntities: 20000000 }
+// `maxSvgLength` bounds toSVG's output, in characters, under the longest string a JavaScript engine
+// will build.
+export const DEFAULT_LIMITS = {
+  maxDepth: 64,
+  maxEntities: 20000000,
+  maxSvgLength: 500000000,
+}
 
 // The error thrown when flattening, or what is drawn from it, would pass `max`.
 export const tooMany = (max) =>
@@ -28,6 +34,10 @@ const limitOr = (value, fallback) =>
 export const resolveLimits = (limits) => ({
   maxDepth: limitOr((limits || {}).maxDepth, DEFAULT_LIMITS.maxDepth),
   maxEntities: limitOr((limits || {}).maxEntities, DEFAULT_LIMITS.maxEntities),
+  maxSvgLength: limitOr(
+    (limits || {}).maxSvgLength,
+    DEFAULT_LIMITS.maxSvgLength,
+  ),
 })
 
 // An array count as a whole number of at least one; anything else counts as one.
